@@ -11,6 +11,11 @@ import (
 	"sync"
 )
 
+//prevent race condition
+//sync.RWMutex - allows multiple concurrent reads (RLock) but exclusive writes (Lock)
+//mu.Lock() in Create, Update, Delete - ensures only one goroutine modifies the map at a time
+//mu.RLock() in Get - allows concurrent reads without blocking other reads
+
 // User represents a user in the system
 type User struct {
 	ID    int    `json:"id"`
@@ -43,7 +48,7 @@ func (s *UserStore) Create(name, email string) (*User, error) {
 		Name:  name,
 		Email: email,
 	}
-	s.users[s.nextID] = user
+	s.users[s.nextID] = user  //← Multiple goroutines writing here
 	s.nextID++
 
 	return user, nil
