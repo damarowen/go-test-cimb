@@ -43,12 +43,20 @@ func (s *UserStore) Create(name, email string) (*User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	//check if email already exists
+	for _, user := range s.users {
+		if user.Email == email {
+			return nil, fmt.Errorf("email already exists")
+		}
+	}
+
 	user := &User{
 		ID:    s.nextID,
 		Name:  name,
 		Email: email,
 	}
-	s.users[s.nextID] = user  //← Multiple goroutines writing here
+	s.users[s.nextID] = user //← Multiple goroutines writing here
+	log.Printf("Created user: %v\n", user)
 	s.nextID++
 
 	return user, nil
@@ -195,6 +203,10 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	// Create user
 	user, err := h.store.Create(strings.TrimSpace(req.Name), strings.TrimSpace(req.Email))
 	if err != nil {
+		if err.Error() == "email already exists" {
+			respondWithError(w, http.StatusBadRequest, "validation_error", err.Error())
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, "internal_error", "Failed to create user")
 		return
 	}
@@ -304,7 +316,7 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "User deleted successfully"})
 }
 
 // Router handles routing logic
