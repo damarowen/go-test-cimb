@@ -8,20 +8,14 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Simple Cache Example ===")
+	fmt.Println("=== Simple Cache Example start ===")
 	simpleCache := cache.NewSimpleCache()
 
 	// Set and Get
 	simpleCache.Set("user:1", "John Doe")
-	simpleCache.Set("user:2", "Jane Smith")
-	simpleCache.Set("count", 42)
 
 	if value, exists := simpleCache.Get("user:1"); exists {
-		fmt.Printf("Found: %v\n", value)
-	}
-
-	if value, exists := simpleCache.Get("count"); exists {
-		fmt.Printf("Count: %v\n", value)
+		fmt.Printf("Found: %v,%v\n", value, "user:1")
 	}
 
 	// Delete
@@ -30,67 +24,40 @@ func main() {
 		fmt.Println("user:1 has been deleted")
 	}
 
-	fmt.Println("\n=== TTL Cache Example ===")
-	ttlCache := cache.NewTTLCache(2 * time.Second)
+	fmt.Println("\n=== TTL Cache Example start ===")
+	ttlCache := cache.NewTTLCache(5 * time.Second) //default TTL is 5 seconds
 	defer ttlCache.Stop()
 
 	// Set with default TTL
-	ttlCache.Set("session:abc", "active")
-	fmt.Println("Session set with 2-second TTL")
+	ttlCache.SetWithDefaultTTL("session:abc", "active")
 
 	// Immediate get
 	if value, exists := ttlCache.Get("session:abc"); exists {
-		fmt.Printf("Session status: %v\n", value)
+		fmt.Printf("session:abc status: %v\n", value)
 	}
 
 	// Wait 1 second
 	fmt.Println("\nWaiting 1 second...")
 	time.Sleep(1 * time.Second)
-	if value, exists := ttlCache.Get("session:abc"); exists {
-		fmt.Printf("Session still active: %v\n", value)
-	}
 
-	// Wait another 1.5 seconds (total 2.5 seconds)
-	fmt.Println("\nWaiting another 1.5 seconds...")
-	time.Sleep(1500 * time.Millisecond)
-	if _, exists := ttlCache.Get("session:abc"); !exists {
-		fmt.Println("Session has expired")
+	if value, exists := ttlCache.Get("session:abc"); exists {
+		fmt.Printf("session:abc status: %v\n", value)
 	}
+	// Wait another 1.5 seconds (total 2.5 seconds)
+	fmt.Println("\nWaiting another 4 seconds...")
+	time.Sleep(4000 * time.Millisecond)
 
 	fmt.Println("\n=== Custom TTL Example ===")
 	// Set with custom TTL
-	ttlCache.SetWithTTL("temp:data", "short-lived", 500*time.Millisecond)
-	fmt.Println("Set temp data with 500ms TTL")
-
-	if value, exists := ttlCache.Get("temp:data"); exists {
-		fmt.Printf("Temp data: %v\n", value)
-	}
-
-	time.Sleep(600 * time.Millisecond)
+	ttlCache.SetWithTTL("temp:data", "one-minute", 1*time.Minute)
+	ttlCache.SetWithTTL("user_id_1", "Alice", 2*time.Second) // Expires in 2s
+	ttlCache.SetWithTTL("user_id_2", "Bob", 30*time.Second)  // Expires in 30s
+	time.Sleep(65 * time.Second)
 	if _, exists := ttlCache.Get("temp:data"); !exists {
 		fmt.Println("Temp data has expired")
 	}
-
-	fmt.Println("\n=== Complex Data Types Example ===")
-	type User struct {
-		ID    int
-		Name  string
-		Email string
+	if _, exists := ttlCache.Get("user_id_2"); !exists {
+		fmt.Println("Temp user_id_2 has expired")
 	}
-
-	user := User{ID: 1, Name: "Alice", Email: "alice@example.com"}
-	simpleCache.Set("user:object", user)
-
-	if value, exists := simpleCache.Get("user:object"); exists {
-		if u, ok := value.(User); ok {
-			fmt.Printf("User: %s (%s)\n", u.Name, u.Email)
-		}
-	}
-
-	fmt.Println("\n=== Cache Statistics ===")
 	ttlCache.Clear()
-	for i := 0; i < 10; i++ {
-		ttlCache.Set(fmt.Sprintf("key:%d", i), i*10)
-	}
-	fmt.Printf("Cache size: %d items\n", ttlCache.Size())
 }

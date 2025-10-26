@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -53,11 +54,6 @@ type cacheItem struct {
 	expiration time.Time
 }
 
-// isExpired checks if the cache item has expired
-func (item *cacheItem) isExpired() bool {
-	return time.Now().After(item.expiration)
-}
-
 // TTLCache is a cache implementation with time-to-live functionality
 type TTLCache struct {
 	data          map[string]*cacheItem
@@ -65,6 +61,7 @@ type TTLCache struct {
 	defaultTTL    time.Duration
 	cleanupTicker *time.Ticker
 	stopCleanup   chan bool
+	wg            sync.WaitGroup
 }
 
 // NewTTLCache creates a new TTLCache instance with specified default TTL
@@ -75,7 +72,7 @@ func NewTTLCache(defaultTTL time.Duration) *TTLCache {
 		stopCleanup: make(chan bool),
 	}
 
-	// Start background cleanup goroutine
+	// Start a background cleanup goroutine
 	cache.startCleanup()
 
 	return cache
@@ -84,23 +81,28 @@ func NewTTLCache(defaultTTL time.Duration) *TTLCache {
 // startCleanup starts a background goroutine to periodically clean expired entries
 func (c *TTLCache) startCleanup() {
 	// Run cleanup every minute or every TTL/2, whichever is shorter
+	//this is primary logic to determine cleanup interval, dibagi 2 adalah agar memiliki interval yang lebih ideal
 	cleanupInterval := c.defaultTTL / 2
 	if cleanupInterval > time.Minute {
-		cleanupInterval = time.Minute
+		cleanupInterval = time.Minute // Max: 1 minute
 	}
 	if cleanupInterval < time.Second {
-		cleanupInterval = time.Second
+		cleanupInterval = time.Second // Min: 1 second
 	}
 
+	//start ticker, check for expired items every cleanupInterval, seperti setInterval() di js
 	c.cleanupTicker = time.NewTicker(cleanupInterval)
+	c.wg.Add(1)
 
 	go func() {
+		defer c.wg.Done() //use defer so it will panic-safe if something goes wrong
 		for {
 			select {
 			case <-c.cleanupTicker.C:
+				log.Printf("cleanup called, checking expired items every %v", cleanupInterval)
 				c.deleteExpired()
-			case <-c.stopCleanup:
-				c.cleanupTicker.Stop()
+			case <-c.stopCleanup: //stop the loop
+				log.Println("cleanup stopped")
 				return
 			}
 		}
@@ -113,15 +115,17 @@ func (c *TTLCache) deleteExpired() {
 	defer c.mu.Unlock()
 
 	now := time.Now()
+	//check if any item has expired > now
 	for key, item := range c.data {
 		if now.After(item.expiration) {
+			log.Printf("delete expired item %s", key)
 			delete(c.data, key)
 		}
 	}
 }
 
 // Set stores a value in the cache with default TTL
-func (c *TTLCache) Set(key string, value interface{}) {
+func (c *TTLCache) SetWithDefaultTTL(key string, value interface{}) {
 	c.SetWithTTL(key, value, c.defaultTTL)
 }
 
@@ -134,6 +138,7 @@ func (c *TTLCache) SetWithTTL(key string, value interface{}, ttl time.Duration) 
 		value:      value,
 		expiration: time.Now().Add(ttl),
 	}
+	log.Printf("Set %s to %v with TTL %v", key, value, ttl)
 }
 
 // Get retrieves a value from the cache if it exists and hasn't expired
@@ -146,11 +151,13 @@ func (c *TTLCache) Get(key string) (interface{}, bool) {
 		return nil, false
 	}
 
-	// Check if item has expired
-	if item.isExpired() {
+	// Check if an item has expired, prevent returning expired items
+	// For memory-critical applications, consider (delete-on-get).
+	if time.Now().After(item.expiration) {
 		return nil, false
 	}
 
+	log.Printf("Get %s from cache success", key)
 	return item.value, true
 }
 
@@ -158,12 +165,15 @@ func (c *TTLCache) Get(key string) (interface{}, bool) {
 func (c *TTLCache) Delete(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	log.Printf("Delete %s from cache", key)
 	delete(c.data, key)
 }
 
 // Stop stops the background cleanup goroutine
 func (c *TTLCache) Stop() {
-	c.stopCleanup <- true
+	c.cleanupTicker.Stop() // Stop ticker first
+	close(c.stopCleanup)   // Close instead of send
+	c.wg.Wait()            // ← Wait for goroutine to finish
 }
 
 // Clear removes all entries from the cache
@@ -171,11 +181,4 @@ func (c *TTLCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.data = make(map[string]*cacheItem)
-}
-
-// Size returns the number of items in the cache (including expired ones)
-func (c *TTLCache) Size() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.data)
 }

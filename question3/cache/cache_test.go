@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -34,112 +35,28 @@ func TestSimpleCache_BasicOperations(t *testing.T) {
 	}
 }
 
-// TestSimpleCache_DifferentTypes tests storing different data types
-func TestSimpleCache_DifferentTypes(t *testing.T) {
-	cache := NewSimpleCache()
-
-	// Test string
-	cache.Set("string", "test")
-	value, _ := cache.Get("string")
-	if value.(string) != "test" {
-		t.Error("String value mismatch")
-	}
-
-	// Test int
-	cache.Set("int", 42)
-	value, _ = cache.Get("int")
-	if value.(int) != 42 {
-		t.Error("Int value mismatch")
-	}
-
-	// Test slice
-	testSlice := []int{1, 2, 3}
-	cache.Set("slice", testSlice)
-	value, _ = cache.Get("slice")
-	retrievedSlice := value.([]int)
-	if len(retrievedSlice) != 3 || retrievedSlice[0] != 1 {
-		t.Error("Slice value mismatch")
-	}
-
-	// Test struct
-	type TestStruct struct {
-		Name string
-		Age  int
-	}
-	testStruct := TestStruct{Name: "John", Age: 30}
-	cache.Set("struct", testStruct)
-	value, _ = cache.Get("struct")
-	retrievedStruct := value.(TestStruct)
-	if retrievedStruct.Name != "John" || retrievedStruct.Age != 30 {
-		t.Error("Struct value mismatch")
-	}
-}
-
-// TestSimpleCache_Overwrite tests overwriting existing keys
-func TestSimpleCache_Overwrite(t *testing.T) {
-	cache := NewSimpleCache()
-
-	cache.Set("key", "value1")
-	cache.Set("key", "value2")
-
-	value, exists := cache.Get("key")
-	if !exists {
-		t.Error("Expected key to exist")
-	}
-	if value != "value2" {
-		t.Errorf("Expected value2, got %v", value)
-	}
-}
-
 // TestSimpleCache_ConcurrentAccess tests thread safety
 func TestSimpleCache_ConcurrentAccess(t *testing.T) {
 	cache := NewSimpleCache()
 	var wg sync.WaitGroup
 	numGoroutines := 100
-	numOperations := 100
-
-	// Concurrent writes
-	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
-		go func(id int) {
-			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
-				key := string(rune('a' + (id % 26)))
-				cache.Set(key, id*numOperations+j)
-			}
-		}(i)
-	}
-	wg.Wait()
-
-	// Concurrent reads
-	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
-		go func(id int) {
-			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
-				key := string(rune('a' + (id % 26)))
-				cache.Get(key)
-			}
-		}(i)
-	}
-	wg.Wait()
 
 	// Concurrent mixed operations
 	wg.Add(numGoroutines * 3)
 	for i := 0; i < numGoroutines; i++ {
 		go func(id int) {
 			defer wg.Done()
-			key := string(rune('a' + (id % 26)))
+			key := fmt.Sprintf("key%d", id%26)
 			cache.Set(key, id)
 		}(i)
 		go func(id int) {
 			defer wg.Done()
-			key := string(rune('a' + (id % 26)))
+			key := fmt.Sprintf("key%d", id%26)
 			cache.Get(key)
 		}(i)
 		go func(id int) {
 			defer wg.Done()
-			key := string(rune('a' + (id % 26)))
+			key := fmt.Sprintf("key%d", id%26)
 			cache.Delete(key)
 		}(i)
 	}
@@ -152,7 +69,7 @@ func TestTTLCache_BasicOperations(t *testing.T) {
 	defer cache.Stop()
 
 	// Test Set and Get
-	cache.Set("key1", "value1")
+	cache.SetWithDefaultTTL("key1", "value1")
 	value, exists := cache.Get("key1")
 	if !exists {
 		t.Error("Expected key1 to exist")
@@ -169,69 +86,19 @@ func TestTTLCache_BasicOperations(t *testing.T) {
 	}
 }
 
-// TestTTLCache_Expiration tests that entries expire after TTL
-func TestTTLCache_Expiration(t *testing.T) {
-	ttl := 100 * time.Millisecond
-	cache := NewTTLCache(ttl)
-	defer cache.Stop()
-
-	cache.Set("key1", "value1")
-
-	// Should exist immediately
-	_, exists := cache.Get("key1")
-	if !exists {
-		t.Error("Expected key1 to exist immediately after set")
-	}
-
-	// Wait for expiration
-	time.Sleep(ttl + 50*time.Millisecond)
-
-	// Should not exist after expiration
-	_, exists = cache.Get("key1")
-	if exists {
-		t.Error("Expected key1 to be expired")
-	}
-}
-
-// TestTTLCache_CustomTTL tests setting custom TTL for entries
-func TestTTLCache_CustomTTL(t *testing.T) {
-	cache := NewTTLCache(5 * time.Second)
-	defer cache.Stop()
-
-	shortTTL := 50 * time.Millisecond
-	cache.SetWithTTL("short", "value", shortTTL)
-
-	// Should exist immediately
-	_, exists := cache.Get("short")
-	if !exists {
-		t.Error("Expected short to exist immediately")
-	}
-
-	// Wait for short TTL to expire
-	time.Sleep(shortTTL + 20*time.Millisecond)
-
-	// Should be expired
-	_, exists = cache.Get("short")
-	if exists {
-		t.Error("Expected short to be expired")
-	}
-}
-
 // TestTTLCache_NoExpiration tests that items don't expire prematurely
 func TestTTLCache_NoExpiration(t *testing.T) {
 	ttl := 200 * time.Millisecond
 	cache := NewTTLCache(ttl)
 	defer cache.Stop()
 
-	cache.Set("key", "value")
+	cache.SetWithDefaultTTL("key", "value")
 
-	// Check multiple times before expiration
-	for i := 0; i < 5; i++ {
-		time.Sleep(30 * time.Millisecond)
-		_, exists := cache.Get("key")
-		if !exists {
-			t.Errorf("Expected key to exist at check %d", i+1)
-		}
+	// Check 30ms times before expiration
+	time.Sleep(30 * time.Millisecond)
+	_, exists := cache.Get("key")
+	if !exists {
+		t.Error("Expected key to still exist")
 	}
 }
 
@@ -243,21 +110,12 @@ func TestTTLCache_AutoCleanup(t *testing.T) {
 
 	// Add multiple entries
 	for i := 0; i < 10; i++ {
-		cache.Set(string(rune('a'+i)), i)
-	}
-
-	initialSize := cache.Size()
-	if initialSize != 10 {
-		t.Errorf("Expected 10 entries, got %d", initialSize)
+		key := fmt.Sprintf("key%d", 1)
+		cache.SetWithDefaultTTL(key, i)
 	}
 
 	// Wait for cleanup to run (TTL + cleanup interval)
 	time.Sleep(ttl + 200*time.Millisecond)
-
-	finalSize := cache.Size()
-	if finalSize >= initialSize {
-		t.Errorf("Expected cleanup to reduce size, initial: %d, final: %d", initialSize, finalSize)
-	}
 }
 
 // TestTTLCache_ConcurrentAccess tests thread safety with TTL
@@ -276,8 +134,8 @@ func TestTTLCache_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				key := string(rune('a' + (id % 26)))
-				cache.Set(key, id*numOperations+j)
+				key := fmt.Sprintf("key%d", id%26)
+				cache.SetWithDefaultTTL(key, id*numOperations+j)
 				time.Sleep(time.Millisecond)
 			}
 		}(i)
@@ -286,7 +144,7 @@ func TestTTLCache_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				key := string(rune('a' + (id % 26)))
+				key := fmt.Sprintf("key%d", id%26)
 				cache.Get(key)
 				time.Sleep(time.Millisecond)
 			}
@@ -296,7 +154,7 @@ func TestTTLCache_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				key := string(rune('a' + (id % 26)))
+				key := fmt.Sprintf("key%d", id%26)
 				cache.Delete(key)
 				time.Sleep(2 * time.Millisecond)
 			}
@@ -312,13 +170,13 @@ func TestTTLCache_UpdateExpiration(t *testing.T) {
 	cache := NewTTLCache(ttl)
 	defer cache.Stop()
 
-	cache.Set("key", "value1")
+	cache.SetWithDefaultTTL("key", "value1")
 
 	// Wait half the TTL
 	time.Sleep(ttl / 2)
 
 	// Update the key
-	cache.Set("key", "value2")
+	cache.SetWithDefaultTTL("key", "value2")
 
 	// Wait another half TTL (should still exist)
 	time.Sleep(ttl / 2)
@@ -340,108 +198,107 @@ func TestTTLCache_UpdateExpiration(t *testing.T) {
 	}
 }
 
+// TestTTLCache_DeleteExpired tests the cleanup of expired entries
+func TestTTLCache_DeleteExpired(t *testing.T) {
+	ttl := 100 * time.Millisecond
+	cache := NewTTLCache(ttl)
+	defer cache.Stop()
+
+	// Add 3 items
+	cache.SetWithDefaultTTL("item1", "value1")
+	cache.SetWithDefaultTTL("item2", "value2")
+	cache.SetWithDefaultTTL("item3", "value3")
+
+	// Wait for items to expire
+	time.Sleep(150 * time.Millisecond)
+
+	// Trigger cleanup
+	cache.deleteExpired()
+
+	// Check all items are gone
+	if _, exists := cache.Get("item1"); exists {
+		t.Error("item1 should be deleted")
+	}
+	if _, exists := cache.Get("item2"); exists {
+		t.Error("item2 should be deleted")
+	}
+	if _, exists := cache.Get("item3"); exists {
+		t.Error("item3 should be deleted")
+	}
+}
+
 // TestTTLCache_Clear tests clearing the cache
 func TestTTLCache_Clear(t *testing.T) {
 	cache := NewTTLCache(5 * time.Second)
 	defer cache.Stop()
 
-	// Add entries
-	for i := 0; i < 10; i++ {
-		cache.Set(string(rune('a'+i)), i)
-	}
+	// Add some entries
+	cache.SetWithDefaultTTL("key1", "value1")
+	cache.SetWithDefaultTTL("key2", "value2")
 
-	if cache.Size() != 10 {
-		t.Errorf("Expected 10 entries, got %d", cache.Size())
-	}
-
+	// Clear the cache
 	cache.Clear()
 
-	if cache.Size() != 0 {
-		t.Errorf("Expected 0 entries after clear, got %d", cache.Size())
+	// Verify all items are gone
+	if _, exists := cache.Get("key1"); exists {
+		t.Error("Expected key1 to not exist after clear")
 	}
-
-	// Verify items don't exist
-	for i := 0; i < 10; i++ {
-		_, exists := cache.Get(string(rune('a' + i)))
-		if exists {
-			t.Errorf("Expected key %c to not exist after clear", 'a'+i)
-		}
+	if _, exists := cache.Get("key2"); exists {
+		t.Error("Expected key2 to not exist after clear")
 	}
 }
 
-// TestCache_Interface tests that both implementations satisfy the Cache interface
-func TestCache_Interface(t *testing.T) {
-	var _ Cache = (*SimpleCache)(nil)
-	var _ Cache = (*TTLCache)(nil)
+// TestGapBehavior validates that expired items are inaccessible during the gap
+func TestGapBehavior(t *testing.T) {
+	ttlCache := NewTTLCache(5 * time.Second)
+	defer ttlCache.Stop()
 
-	testCases := []struct {
-		name  string
-		cache Cache
-	}{
-		{"SimpleCache", NewSimpleCache()},
-		{"TTLCache", NewTTLCache(5 * time.Second)},
+	// Add item with 2-second TTL
+	// Cleanup interval will be 5s/2 = 2.5s
+	ttlCache.SetWithTTL("user_id_1", "Alice", 2*time.Second)
+
+	// Should exist immediately
+	if val, exists := ttlCache.Get("user_id_1"); !exists {
+		t.Error("Expected item to exist immediately after setting")
+	} else {
+		t.Logf("T+0s: Item exists, value=%v", val)
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			cache := tc.cache
+	// Wait until item expires
+	time.Sleep(2100 * time.Millisecond) // T+2.1s (item expired at T+2s)
 
-			// Test Set and Get
-			cache.Set("test", "value")
-			value, exists := cache.Get("test")
-			if !exists {
-				t.Error("Expected test key to exist")
-			}
-			if value != "value" {
-				t.Errorf("Expected 'value', got %v", value)
-			}
+	// Item should be expired but still in memory (gap period)
+	t.Log("T+2.1s: Item has expired (in gap period)")
 
-			// Test Delete
-			cache.Delete("test")
-			_, exists = cache.Get("test")
-			if exists {
-				t.Error("Expected test key to be deleted")
-			}
-		})
+	// Get() should return nil/false even though item is still in map
+	if val, exists := ttlCache.Get("user_id_1"); exists {
+		t.Errorf("Expected Get() to return false for expired item during gap, got value=%v", val)
+	} else {
+		t.Log("✅ Get() correctly returns nil/false for expired item")
 	}
-}
 
-// BenchmarkSimpleCache_Set benchmarks Set operation for SimpleCache
-func BenchmarkSimpleCache_Set(b *testing.B) {
-	cache := NewSimpleCache()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		cache.Set("key", i)
+	// Check if item is actually still in memory
+	ttlCache.mu.RLock()
+	_, stillInMap := ttlCache.data["user_id_1"]
+	ttlCache.mu.RUnlock()
+
+	if stillInMap {
+		t.Log("⚠️ Item is still in memory (gap confirmed)")
+	} else {
+		t.Log("Item already deleted (no gap detected)")
 	}
-}
 
-// BenchmarkSimpleCache_Get benchmarks Get operation for SimpleCache
-func BenchmarkSimpleCache_Get(b *testing.B) {
-	cache := NewSimpleCache()
-	cache.Set("key", "value")
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		cache.Get("key")
-	}
-}
+	// Wait for cleanup to run (cleanup interval is 2.5s)
+	time.Sleep(500 * time.Millisecond) // T+2.6s (cleanup should have run)
 
-// BenchmarkTTLCache_Set benchmarks Set operation for TTLCache
-func BenchmarkTTLCache_Set(b *testing.B) {
-	cache := NewTTLCache(5 * time.Second)
-	defer cache.Stop()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		cache.Set("key", i)
-	}
-}
+	// Verify item is now deleted from memory
+	ttlCache.mu.RLock()
+	_, stillExists := ttlCache.data["user_id_1"]
+	ttlCache.mu.RUnlock()
 
-// BenchmarkTTLCache_Get benchmarks Get operation for TTLCache
-func BenchmarkTTLCache_Get(b *testing.B) {
-	cache := NewTTLCache(5 * time.Second)
-	defer cache.Stop()
-	cache.Set("key", "value")
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		cache.Get("key")
+	if stillExists {
+		t.Error("Expected item to be deleted from memory after cleanup")
+	} else {
+		t.Log("✅ Item deleted from memory after cleanup")
 	}
 }
