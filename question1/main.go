@@ -9,14 +9,14 @@ import (
 // calculateEvenSum processes a slice chunk and sends the sum of even numbers to the results channel
 func calculateEvenSum(numbers []int, results chan<- int, wg *sync.WaitGroup) {
 	defer wg.Done()
-	
+
 	sum := 0
 	for _, num := range numbers {
 		if num%2 == 0 {
 			sum += num
 		}
 	}
-	
+
 	results <- sum
 }
 
@@ -25,14 +25,19 @@ func sumEvenNumbersConcurrent(numbers []int, numWorkers int) int {
 	if len(numbers) == 0 {
 		return 0
 	}
-	
+
 	// Create channel with capacity equal to number of workers
 	results := make(chan int, numWorkers)
 	var wg sync.WaitGroup
-	
+
 	// use chunk so each worker not process entire numbers
 	chunkSize := len(numbers) / numWorkers
 	//The remainder tells you how many workers should get one extra item so all items are processed.
+	// contoh jika numbers=10 dan numWorkers=3, maka chunkSize=3 dan remainder=1
+	//Worker 1: Mengerjakan 4 angka ([1, 2, 3, 4]) ( ditambah 1 dari remainder)
+	//Worker 2: Mengerjakan 3 angka ([5, 6, 7])
+	//Worker 3: Mengerjakan 3 angka ([8, 9, 10])
+
 	remainder := len(numbers) % numWorkers
 
 	startIdx := 0
@@ -68,13 +73,13 @@ func sumEvenNumbersConcurrent(numbers []int, numWorkers int) int {
 		wg.Wait()
 		close(results)
 	}()
-	
+
 	// Collect results from all workers
 	totalSum := 0
 	for partialSum := range results {
 		totalSum += partialSum
 	}
-	
+
 	return totalSum
 }
 
@@ -89,9 +94,9 @@ func main() {
 
 	// Test with 4 workers
 	numWorkers := 4
-	
+
 	fmt.Printf("Processing %d numbers with %d workers...\n", sliceSize, numWorkers)
-	
+
 	startTime := time.Now()
 	sum := sumEvenNumbersConcurrent(numbers, numWorkers)
 	duration := time.Since(startTime)
