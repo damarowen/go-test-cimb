@@ -24,6 +24,15 @@ type User struct {
 }
 
 // UserStore manages user data with thread-safe operations
+// ini akan di akses bareng2 , maka perlu di lindungi dengan mutex
+// Goroutine 1 (POST /users)
+//s.users[s.nextID] = user  // ✍️ WRITE
+// Goroutine 2 (GET /users/1)
+//user, exists := s.users[id]  // 👁️ READ
+// Goroutine 3 (PUT /users/2)
+//s.users[id].Name = name  // ✍️ WRITE
+// Goroutine 4 (DELETE /users/3)
+
 type UserStore struct {
 	users  map[int]*User
 	nextID int

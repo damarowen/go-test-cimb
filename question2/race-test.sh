@@ -1,7 +1,8 @@
 #!/bin/bash
 
 BASE_URL="http://localhost:8080"
-
+#Tujuan script:
+# Testing apakah server bisa handle 50 concurrent reads + 50 concurrent writes tanpa error (race condition).
 echo "Testing concurrent reads AND writes..."
 
 # Start 50 concurrent reads
