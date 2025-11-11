@@ -56,7 +56,7 @@ type cacheItem struct {
 
 // TTLCache is a cache implementation with time-to-live functionality
 type TTLCache struct {
-	data          map[string]*cacheItem
+	data          map[string]*cacheItem // ← Shared data!
 	mu            sync.RWMutex
 	defaultTTL    time.Duration
 	cleanupTicker *time.Ticker
