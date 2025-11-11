@@ -236,6 +236,8 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("get userrrr")
+
 	// Extract ID from URL
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	if len(pathParts) != 2 {
@@ -255,6 +257,31 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	respondWithJSON(w, http.StatusOK, user)
+}
+
+func (h *UserHandler) GetUserByEmail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Only GET method is allowed")
+		return
+	}
+
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) != 3 {
+		respondWithError(w, http.StatusBadRequest, "invalid_request", "Invalid URL format")
+		return
+	}
+
+	email := strings.TrimSpace(pathParts[2])
+	if email == "" {
+		respondWithError(w, http.StatusBadRequest, "invalid_request", "Invalid email")
+		return
+	}
+	user, exists := h.store.FindByEmail(strings.TrimSpace(email))
+	if !exists {
+		respondWithError(w, http.StatusNotFound, "not_found", "User not found")
+		return
+	}
 	respondWithJSON(w, http.StatusOK, user)
 }
 
@@ -334,6 +361,19 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "User deleted successfully"})
 }
 
+// find user by email
+func (s *UserStore) FindByEmail(email string) (*User, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, user := range s.users {
+		if user.Email == email {
+			return user, true
+		}
+	}
+	return nil, false
+}
+
 // Router handles routing logic
 func (h *UserHandler) Router(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
@@ -344,8 +384,20 @@ func (h *UserHandler) Router(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// GET /users/email/:email
+	if strings.HasPrefix(path, "/users/email/") {
+		switch r.Method {
+		case http.MethodGet:
+			h.GetUserByEmail(w, r)
+		default:
+			respondWithError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed")
+		}
+		return
+	}
+
 	// GET, PUT, DELETE /users/:id
 	if strings.HasPrefix(path, "/users/") {
+		log.Println("get user")
 		switch r.Method {
 		case http.MethodGet:
 			h.GetUser(w, r)
@@ -359,6 +411,8 @@ func (h *UserHandler) Router(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("path", path)
+
 	respondWithError(w, http.StatusNotFound, "not_found", "Endpoint not found")
 }
 
@@ -370,12 +424,6 @@ func main() {
 
 	port := ":8080"
 	fmt.Printf("Server starting on port %s...\n", port)
-	fmt.Println("Available endpoints:")
-	fmt.Println("  POST   /users       - Create a new user")
-	fmt.Println("  GET    /users/:id   - Get user by ID")
-	fmt.Println("  PUT    /users/:id   - Update user by ID")
-	fmt.Println("  DELETE /users/:id   - Delete user by ID")
-
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatal(err)
 	}

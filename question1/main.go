@@ -89,7 +89,7 @@ func sumEvenNumbersConcurrent(numbers []int, numWorkers int) int {
 // main is the entry point of the application, demonstrating concurrent and sequential even-number summation.
 func main() {
 	// Create a large slice of integers for testing
-	const sliceSize = 10
+	const sliceSize = 100
 	numbers := make([]int, sliceSize)
 	for i := 0; i < sliceSize; i++ {
 		numbers[i] = i + 1

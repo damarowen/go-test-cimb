@@ -15,7 +15,7 @@ type Cache interface {
 
 // SimpleCache is a basic in-memory cache implementation
 type SimpleCache struct {
-	data map[string]interface{}
+	data map[string]interface{} //tipe map[string]interface{} adalah dictionary/hashmap
 	mu   sync.RWMutex
 }
 
