@@ -50,10 +50,13 @@ func NewUserStore() *UserStore {
 // Create adds a new user to the store
 func (s *UserStore) Create(name, email string) (*User, error) {
 	s.mu.Lock()
+	//s.mu.Lock() memastikan hanya 1 goroutine yang bisa menjalankan kode ini pada satu waktu
+	//Jadi tidak akan ada 2 user dengan ID yang sama
 	defer s.mu.Unlock()
 
 	//check if email already exists
 	for _, user := range s.users {
+		log.Printf("Created user: %v\n", *user)
 		if user.Email == email {
 			return nil, fmt.Errorf("email already exists")
 		}
@@ -65,8 +68,8 @@ func (s *UserStore) Create(name, email string) (*User, error) {
 		Email: email,
 	}
 	s.users[s.nextID] = user //← Multiple goroutines writing here
-	log.Printf("Created user: %v\n", user)
 	s.nextID++
+	log.Printf("Created user: %v\n", user)
 
 	return user, nil
 }
