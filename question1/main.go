@@ -71,6 +71,8 @@ func sumEvenNumbersConcurrent(numbers []int, numWorkers int) int {
 	}
 
 	// Close results channel when all workers are done
+	// jikat tidak di esekusi di go routine maka akan terjadi deadlock, karena channel akan terblokir tidak ada yg read
+	// tapi karena ada buffer maka masih aman, tapi tetap saja lebih baik di close di goroutine
 	go func() {
 		wg.Wait()
 		close(results)
